@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quản lý kho linh kiện</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">Quản lý kho linh kiện</div>
+  <nav class="tabs" id="tabs">
+    <button data-v="catalog" class="on">Danh mục</button>
+    <button data-v="moves">Nhập / Xuất</button>
+    <button data-v="count">Kiểm kê</button>
+    <button data-v="import">Nhập liệu</button>
+    <button data-v="excel">Công cụ Excel</button>
+    <button data-v="reports">Báo cáo</button>
+    <button data-v="settings">Cài đặt</button>
+  </nav>
+  <span class="flash" id="flash"></span>
+</header>
+
+<main class="wrap">
+
+  <!-- ====== DANH MỤC ====== -->
+  <section class="view" id="v-catalog">
+    <div class="card">
+      <div class="row">
+        <div style="flex:1 1 320px">
+          <label>Tìm kiếm — mã ngắn, mã hàng, tên, bỏ dấu đều được</label>
+          <div class="seek">
+            <input type="text" id="q" placeholder="k420 · d811 · sp00750 · cam bien chong roi" style="width:100%">
+            <button class="btn ic" id="scanBtn" title="Quét mã vạch">⌸</button>
+          </div>
+        </div>
+        <div><label>Nhóm máy</label><select id="mach"><option value="">Tất cả</option></select></div>
+        <div><label>Cần xử lý</label>
+          <select id="st">
+            <option value="">Tất cả</option>
+            <option value="noprice">Thiếu giá hiện tại</option>
+            <option value="nonew">Chưa có giá đề xuất</option>
+            <option value="zero">Tồn = 0 (đã hết)</option>
+            <option value="low">Sắp hết (≤ ngưỡng)</option>
+            <option value="noqty">Thiếu số lượng tồn</option>
+          </select>
+        </div>
+        <button class="btn" id="reset">Xoá lọc</button>
+      </div>
+      <div style="margin-top:12px"><label>Mã nhóm linh kiện</label><div class="chips" id="fchips"></div></div>
+    </div>
+
+    <div class="card">
+      <h2>Mức giảm đề xuất theo tồn kho (%)</h2>
+      <div class="tiers">
+        <div class="tier"><input type="number" id="t1" min="0" max="90"><small>tồn ≥ 20</small></div>
+        <div class="tier"><input type="number" id="t2" min="0" max="90"><small>tồn 10 – 19</small></div>
+        <div class="tier"><input type="number" id="t3" min="0" max="90"><small>tồn 5 – 9</small></div>
+        <div class="tier"><input type="number" id="t4" min="0" max="90"><small>tồn 2 – 4</small></div>
+        <div class="tier"><input type="number" id="t5" min="0" max="90"><small>tồn ≤ 1</small></div>
+        <label class="inline"><input type="checkbox" id="recalc"> Tính lại cả giá đã điền sẵn</label>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><span>Dòng hiển thị</span><b id="s1">0</b></div>
+      <div class="stat"><span>Tổng tồn</span><b id="s2">0</b></div>
+      <div class="stat"><span>Thiếu giá</span><b id="s6" class="bad">0</b></div>
+      <div class="stat"><span>Giá trị hiện tại</span><b id="s3">0</b></div>
+      <div class="stat"><span>Giá trị sau giảm</span><b id="s4">0</b></div>
+      <div class="stat"><span>Chênh lệch</span><b id="s5" class="bad">0</b></div>
+    </div>
+
+    <div class="tblwrap">
+      <table>
+        <thead><tr>
+          <th data-s="code">Mã linh kiện</th>
+          <th data-s="name" class="desc">Tên linh kiện</th>
+          <th data-s="qty" class="num">SL tồn</th>
+          <th data-s="price" class="num">Giá hiện tại</th>
+          <th data-s="np" class="num">Giá đề xuất</th>
+          <th data-s="pct" class="num">% giảm</th>
+          <th class="nos">Thao tác</th>
+        </tr></thead>
+        <tbody id="tb"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="none" style="display:none">Không có linh kiện nào khớp bộ lọc.</div>
+
+    <div class="card" style="margin-top:14px">
+      <details><summary>➕ Thêm linh kiện mới</summary>
+        <div class="row">
+          <div><label>Mã hàng</label><input type="text" id="n_sku" placeholder="SP00750" style="width:120px"></div>
+          <div><label>Nhóm máy</label><input type="text" id="n_mach" list="machlist"><datalist id="machlist"></datalist></div>
+          <div><label>Mã linh kiện</label><input type="text" id="n_code" placeholder="F12 - D900" style="width:130px"></div>
+          <div style="flex:1 1 240px"><label>Tên linh kiện</label><input type="text" id="n_name" style="width:100%"></div>
+          <div><label>SL tồn</label><input type="number" id="n_qty" style="width:80px"></div>
+          <div><label>Giá hiện tại</label><input type="number" id="n_price" style="width:120px"></div>
+          <button class="btn p" id="addItem">Thêm</button>
+        </div>
+        <p class="note" id="addmsg"></p>
+      </details>
+    </div>
+  </section>
+
+  <!-- ====== NHẬP / XUẤT ====== -->
+  <section class="view" id="v-moves" hidden>
+    <div class="card hi">
+      <h2>Ghi phiếu</h2>
+      <div class="row">
+        <div><label>Loại phiếu</label>
+          <select id="mvType">
+            <option value="in">Nhập kho (+)</option>
+            <option value="out">Xuất kho (−)</option>
+            <option value="adj">Điều chỉnh (đặt lại tồn)</option>
+          </select>
+        </div>
+        <div style="flex:1 1 320px"><label>Linh kiện</label>
+          <div class="seek">
+            <input type="text" id="mvSeek" placeholder="Gõ mã hoặc tên rồi chọn trong danh sách" style="width:100%" autocomplete="off">
+            <button class="btn ic" id="mvScan" title="Quét mã vạch">⌸</button>
+          </div>
+          <div class="sugg" id="mvSugg"></div>
+        </div>
+        <div><label>Số lượng</label><input type="number" id="mvQty" min="1" value="1" style="width:90px"></div>
+        <div style="flex:1 1 200px"><label>Ghi chú / đơn hàng</label><input type="text" id="mvNote" placeholder="Sửa máy anh A, NCC Quảng Châu…" style="width:100%"></div>
+        <button class="btn p" id="mvAdd" disabled>Ghi phiếu</button>
+      </div>
+      <p class="note" id="mvPick">Chưa chọn linh kiện nào.</p>
+    </div>
+
+    <div class="row" style="margin-bottom:10px">
+      <div style="flex:1 1 240px"><label>Lọc sổ</label><input type="text" id="mvFilter" placeholder="mã, tên, ghi chú" style="width:100%"></div>
+      <div><label>Loại</label><select id="mvFType">
+        <option value="">Tất cả</option><option value="in">Nhập</option>
+        <option value="out">Xuất</option><option value="adj">Điều chỉnh</option></select></div>
+      <button class="btn" id="mvExport">⬇ Xuất sổ nhập xuất (.xlsx)</button>
+    </div>
+    <div class="tblwrap">
+      <table>
+        <thead><tr><th>Thời gian</th><th>Loại</th><th>Mã linh kiện</th><th class="desc">Tên</th>
+          <th class="num">SL</th><th class="num">Tồn sau</th><th>Ghi chú</th><th class="nos"></th></tr></thead>
+        <tbody id="mvTb"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="mvNone" style="display:none">Chưa có phiếu nào.</div>
+  </section>
+
+  <!-- ====== KIỂM KÊ ====== -->
+  <section class="view" id="v-count" hidden>
+    <div class="card hi" id="ctOpen">
+      <h2>Phiên kiểm kê</h2>
+      <div class="row">
+        <div style="flex:1 1 240px"><label>Tên phiên</label><input type="text" id="ctName" placeholder="Kiểm kê kho HN tháng 11" style="width:100%"></div>
+        <div><label>Phạm vi</label><select id="ctScope"><option value="all">Toàn bộ danh mục</option><option value="filter">Theo bộ lọc đang đặt ở Danh mục</option></select></div>
+        <button class="btn p" id="ctStart">Mở phiên mới</button>
+      </div>
+      <p class="note">Mở phiên xong, bạn đi đếm thực tế và nhập số đếm. Chốt phiên sẽ tự sinh phiếu điều chỉnh cho những mã bị lệch.</p>
+    </div>
+
+    <div id="ctRun" hidden>
+      <div class="card hi">
+        <div class="row">
+          <div style="flex:1 1 200px"><b id="ctTitle"></b><div class="note" id="ctMeta"></div></div>
+          <div style="flex:1 1 260px"><label>Tìm mã để nhập số đếm</label>
+            <div class="seek">
+              <input type="text" id="ctSeek" placeholder="gõ mã hoặc tên" style="width:100%">
+              <button class="btn ic" id="ctScan" title="Quét mã vạch">⌸</button>
+            </div>
+          </div>
+          <label class="inline"><input type="checkbox" id="ctOnlyLeft"> Chỉ hiện mã chưa đếm</label>
+          <button class="btn" id="ctExport">⬇ Xuất bảng kiểm kê</button>
+          <button class="btn g" id="ctClose">Chốt phiên</button>
+          <button class="btn d" id="ctCancel">Huỷ phiên</button>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat"><span>Tổng mã</span><b id="c1">0</b></div>
+        <div class="stat"><span>Đã đếm</span><b id="c2">0</b></div>
+        <div class="stat"><span>Chưa đếm</span><b id="c3">0</b></div>
+        <div class="stat"><span>Lệch</span><b id="c4" class="bad">0</b></div>
+        <div class="stat"><span>Giá trị lệch</span><b id="c5" class="bad">0</b></div>
+      </div>
+      <div class="tblwrap">
+        <table>
+          <thead><tr><th>Mã linh kiện</th><th class="desc">Tên</th><th class="num">Sổ sách</th>
+            <th class="num">Thực tế</th><th class="num">Lệch</th><th class="num">Giá trị lệch</th></tr></thead>
+          <tbody id="ctTb"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h2>Phiên đã chốt</h2>
+      <div id="ctHist"></div>
+    </div>
+  </section>
+
+  <!-- ====== NHẬP LIỆU ====== -->
+  <section class="view" id="v-import" hidden>
+    <div class="card hi">
+      <h2>1 · Chọn file</h2>
+      <div class="row">
+        <label class="btn p filelabel" for="imFile">📂 Mở file Excel / CSV</label>
+        <input type="file" id="imFile" accept=".xlsx,.xls,.xlsm,.csv,.txt" class="hidefile">
+        <div id="imSheetWrap" hidden><label>Trang tính</label><select id="imSheet"></select></div>
+        <div id="imHeadWrap" hidden><label>Dòng tiêu đề</label><select id="imHead"></select></div>
+        <div id="imProfWrap" hidden><label>Hồ sơ đã lưu</label><select id="imProf"></select></div>
+        <span class="note" id="imFileInfo" style="margin-left:auto"></span>
+      </div>
+    </div>
+
+    <div id="imBody" hidden>
+      <div class="card">
+        <h2>2 · Xem trước file</h2>
+        <div class="tblwrap" style="max-height:240px"><table id="imPrev"></table></div>
+        <p class="note">Bảng trên là dữ liệu thô trong file. Dòng tô vàng là dòng tiêu đề đang chọn — chọn lại ở trên nếu máy đoán sai.</p>
+      </div>
+
+      <div class="card">
+        <h2>3 · Ghép cột của file vào ô của ứng dụng</h2>
+        <div class="maps" id="imMap"></div>
+        <div class="row" style="margin-top:12px">
+          <label class="inline"><input type="checkbox" id="imSplit"> Tách mã kiểu <b>F12 - D811</b> ra khỏi cột tên</label>
+          <label class="inline"><input type="checkbox" id="imGuess"> Tự đoán nhóm máy từ tên hàng</label>
+          <label class="inline"><input type="checkbox" id="imSkipEmpty" checked> Bỏ dòng không có tên lẫn mã</label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>4 · Đưa dữ liệu này đi đâu</h2>
+        <div class="row">
+          <div><label>Đích đến</label>
+            <select id="imTarget">
+              <option value="replace">Danh mục — thay toàn bộ</option>
+              <option value="merge">Danh mục — cập nhật &amp; thêm mới</option>
+              <option value="price">Chỉ cập nhật giá, giữ nguyên tồn</option>
+              <option value="qty">Chỉ cập nhật số lượng tồn</option>
+              <option value="in">Ghi thành phiếu nhập kho</option>
+              <option value="out">Ghi thành phiếu xuất kho</option>
+            </select>
+          </div>
+          <div id="imDupWrap"><label>Dòng trùng trong file</label>
+            <select id="imDup">
+              <option value="sum">Cộng dồn số lượng</option>
+              <option value="first">Giữ dòng đầu tiên</option>
+              <option value="keep">Giữ nguyên thành dòng riêng</option>
+            </select>
+          </div>
+          <div id="imRefWrap" hidden style="flex:1 1 200px"><label>Ghi chú cho phiếu</label>
+            <input type="text" id="imRef" placeholder="Nhập hàng NCC Quảng Châu 20/11" style="width:100%"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>5 · Kiểm tra rồi nhập</h2>
+        <div class="rep" id="imCheck">Bấm <b>Thử đọc</b> để xem máy hiểu file thế nào trước khi ghi vào dữ liệu thật.</div>
+        <div class="tblwrap" id="imResWrap" hidden style="max-height:260px"><table id="imRes"></table></div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn" id="imTest">Thử đọc</button>
+          <button class="btn p" id="imRun" disabled>Nhập vào dữ liệu</button>
+          <span style="flex:1"></span>
+          <input type="text" id="imProfName" placeholder="Tên hồ sơ, vd: Báo cáo KiotViet" style="width:220px">
+          <button class="btn" id="imProfSave">💾 Lưu hồ sơ này</button>
+          <button class="btn d" id="imProfDel" hidden>Xoá hồ sơ</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====== CÔNG CỤ EXCEL ====== -->
+  <section class="view" id="v-excel" hidden>
+    <p class="note" style="margin:0 0 14px">Bốn công cụ dưới đây làm việc trực tiếp trên file, không cần nhập vào danh mục. Cột được nhận dạng tự động; file nào bố cục quá lạ thì dùng màn <b>Nhập liệu</b> để ghép cột thủ công trước.</p>
+
+    <div class="card">
+      <h2>🔀 So sánh hai file — xem kỳ này khác kỳ trước chỗ nào</h2>
+      <div class="row">
+        <div><label>File cũ (kỳ trước)</label>
+          <label class="btn filelabel" for="cmpA" id="cmpAL">📂 Chọn file cũ</label>
+          <input type="file" id="cmpA" accept=".xlsx,.xls,.csv" class="hidefile"></div>
+        <div><label>File mới (kỳ này)</label>
+          <label class="btn filelabel" for="cmpB" id="cmpBL">📂 Chọn file mới</label>
+          <input type="file" id="cmpB" accept=".xlsx,.xls,.csv" class="hidefile"></div>
+        <button class="btn p" id="cmpRun" disabled>So sánh</button>
+        <button class="btn" id="cmpExp" hidden>⬇ Xuất bảng chênh lệch</button>
+      </div>
+      <div class="rep" id="cmpRep" hidden></div>
+      <div class="tblwrap" id="cmpWrap" hidden style="max-height:300px"><table id="cmpTb"></table></div>
+    </div>
+
+    <div class="card">
+      <h2>➕ Gộp nhiều file thành một</h2>
+      <div class="row">
+        <label class="btn filelabel" for="mgFiles" id="mgL">📂 Chọn nhiều file cùng lúc</label>
+        <input type="file" id="mgFiles" accept=".xlsx,.xls,.csv" multiple class="hidefile">
+        <div><label>Mã trùng giữa các file</label>
+          <select id="mgMode">
+            <option value="sum">Cộng dồn số lượng</option>
+            <option value="first">Giữ file đầu tiên</option>
+            <option value="last">Giữ file sau cùng</option>
+            <option value="keep">Giữ riêng từng dòng</option>
+          </select></div>
+        <button class="btn p" id="mgRun" disabled>Gộp</button>
+        <button class="btn" id="mgExp" hidden>⬇ Tải file đã gộp</button>
+        <button class="btn" id="mgToCat" hidden>Đưa vào danh mục</button>
+      </div>
+      <div class="rep" id="mgRep" hidden></div>
+    </div>
+
+    <div class="card">
+      <h2>✂️ Tách thành nhiều sheet theo nhóm</h2>
+      <div class="row">
+        <div><label>Nguồn</label>
+          <select id="spSrc"><option value="cat">Danh mục đang dùng</option><option value="file">Một file bên ngoài</option></select></div>
+        <div id="spFileWrap" hidden>
+          <label>File</label>
+          <label class="btn filelabel" for="spFile" id="spL">📂 Chọn file</label>
+          <input type="file" id="spFile" accept=".xlsx,.xls,.csv" class="hidefile"></div>
+        <div><label>Tách theo</label>
+          <select id="spBy"><option value="mach">Nhóm máy</option><option value="grp">Mã nhóm F</option></select></div>
+        <button class="btn p" id="spRun">Tách và tải về</button>
+      </div>
+      <div class="rep" id="spRep" hidden></div>
+    </div>
+
+    <div class="card">
+      <h2>🔎 Dò lỗi dữ liệu</h2>
+      <div class="row">
+        <div><label>Nguồn</label>
+          <select id="lnSrc"><option value="cat">Danh mục đang dùng</option><option value="file">Một file bên ngoài</option></select></div>
+        <div id="lnFileWrap" hidden>
+          <label>File</label>
+          <label class="btn filelabel" for="lnFile" id="lnL">📂 Chọn file</label>
+          <input type="file" id="lnFile" accept=".xlsx,.xls,.csv" class="hidefile"></div>
+        <button class="btn p" id="lnRun">Dò lỗi</button>
+        <button class="btn" id="lnExp" hidden>⬇ Xuất danh sách lỗi</button>
+      </div>
+      <div class="rep" id="lnRep" hidden></div>
+      <div class="tblwrap" id="lnWrap" hidden style="max-height:320px"><table id="lnTb"></table></div>
+    </div>
+  </section>
+
+  <!-- ====== BÁO CÁO ====== -->
+  <section class="view" id="v-reports" hidden>
+    <div class="card">
+      <div class="row">
+        <div><label>Ngưỡng sắp hết (≤)</label><input type="number" id="rpLow" style="width:90px"></div>
+        <div><label>Tồn lâu không xuất (ngày)</label><input type="number" id="rpDays" style="width:90px"></div>
+        <button class="btn" id="rpRefresh">Tính lại</button>
+        <button class="btn" id="rpExport" style="margin-left:auto">⬇ Xuất toàn bộ báo cáo (.xlsx)</button>
+      </div>
+    </div>
+    <div class="stats" id="rpTop"></div>
+    <div class="grid2">
+      <div class="card"><h2>Giá trị tồn theo nhóm máy</h2><div id="rpGroup"></div></div>
+      <div class="card"><h2>Tồn nhiều nhất (theo giá trị)</h2><div id="rpBig"></div></div>
+      <div class="card"><h2>Mã sắp hết cần đặt thêm</h2><div id="rpLowList"></div></div>
+      <div class="card"><h2>Hàng tồn lâu không xuất</h2><div id="rpSlow"></div></div>
+      <div class="card"><h2>Xuất nhiều nhất</h2><div id="rpFast"></div></div>
+      <div class="card"><h2>Giá trị tồn trước và sau giảm giá</h2><div id="rpVal"></div></div>
+    </div>
+  </section>
+
+  <!-- ====== CÀI ĐẶT ====== -->
+  <section class="view" id="v-settings" hidden>
+    <div class="card">
+      <h2>Nơi lưu dữ liệu</h2>
+      <div id="stList"></div>
+      <p class="note" id="stWarn"></p>
+    </div>
+
+    <div class="card">
+      <h2>Dữ liệu</h2>
+      <div class="row">
+        <button class="btn p" id="goImport">📂 Nhập dữ liệu từ file Excel / CSV</button>
+        <button class="btn" id="dlAll">⬇ Tải toàn bộ danh mục (.xlsx)</button>
+        <button class="btn" id="bkJson">⬇ Sao lưu toàn bộ (.json)</button>
+        <label class="btn filelabel" for="rsJson">📂 Phục hồi từ bản sao lưu</label>
+        <input type="file" id="rsJson" accept=".json" class="hidefile">
+        <button class="btn d" id="wipe" style="margin-left:auto">Xoá sạch dữ liệu</button>
+      </div>
+      <p class="note">Màn <b>Nhập liệu</b> đọc được file Excel hay CSV bất kỳ bố cục nào: bạn tự chỉ cột nào là gì, máy đoán sẵn giúp, rồi lưu lại thành hồ sơ để lần sau mở file cùng kiểu là tự áp dụng.</p>
+    </div>
+
+    <div class="card">
+      <h2>Thông số chung</h2>
+      <div class="row">
+        <div><label>Ngưỡng cảnh báo sắp hết</label><input type="number" id="cfLow" style="width:100px"></div>
+        <div><label>Số ngày coi là tồn lâu</label><input type="number" id="cfDays" style="width:100px"></div>
+        <div><label>Làm tròn giá xuống bội số</label><input type="number" id="cfRound" style="width:120px"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="bar">
+  <span class="info" id="barinfo"></span>
+  <button class="btn g" id="saveAll">💾 Lưu &amp; xuất file Excel mới (sau giảm giá)</button>
+</div>
+
+<!-- hộp quét mã vạch -->
+<div class="modal" id="scanBox"><div class="mbox">
+  <h3>Quét mã vạch</h3>
+  <video id="scanVid" playsinline muted></video>
+  <p class="note" id="scanMsg">Đang xin quyền camera…</p>
+  <div class="row">
+    <input type="text" id="scanManual" placeholder="Hoặc gõ tay mã hàng rồi Enter" style="flex:1 1 200px">
+    <button class="btn" id="scanClose" style="margin-left:auto">Đóng</button>
+  </div>
+</div></div>
+
+<script src="js/core.js"></script>
+<script src="js/store.js"></script>
+<script src="js/xlsxio.js"></script>
+<script src="js/catalog.js"></script>
+<script src="js/moves.js"></script>
+<script src="js/count.js"></script>
+<script src="js/import.js"></script>
+<script src="js/excel.js"></script>
+<script src="js/reports.js"></script>
+<script src="js/scan.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
